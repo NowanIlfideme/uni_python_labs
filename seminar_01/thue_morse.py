@@ -23,3 +23,8 @@ def get_sequence_item_recursion(n):
 
 
 g = get_sequence_item_recursion
+
+
+if __name__ == "__main__":
+    for i in range(5):
+        print("%s == (%s)" % (i, bin(get_sequence_item(i))))

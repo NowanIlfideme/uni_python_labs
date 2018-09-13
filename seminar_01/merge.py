@@ -92,4 +92,3 @@ if __name__ == "__main__":
     r7 = merge(c, e)
     r8 = merge(f, b)
     r9 = merge(f, g)
-
