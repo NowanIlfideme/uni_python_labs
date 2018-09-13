@@ -2,14 +2,15 @@
 import sys
 import unittest
 import importlib
-import collections
+# import collections
+import os
 
 from unittest import mock
 from io import StringIO
 
 
 # uncomment the line below and change the path specified
-# sys.path.insert(0, r'path_to_solution_folder')
+sys.path.insert(0, os.path.abspath("."))
 
 
 class InterfaceTestCase(unittest.TestCase):
