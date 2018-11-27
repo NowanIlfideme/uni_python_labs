@@ -1,7 +1,7 @@
 
 from numbers import Integral
 from collections.abc import Iterable
-from copy import copy as shallowcopy  # , deepcopy
+# from copy import copy as shallowcopy 
 # import itertools
 
 
@@ -25,6 +25,10 @@ class MidSkipQueue(object):
         # self._front = list(itertools.islice(it, k))
         # self._rear = collections.deque(iterable, maxlen=k)
 
+        self._init_iter(iterable=iterable)
+
+    def _init_iter(self, iterable=()):
+        k = self.k
         front = []
         rear = []
 
@@ -45,7 +49,7 @@ class MidSkipQueue(object):
         except StopIteration:
             pass
         self._rear = rear[cnt % k:] + rear[: cnt % k]
-        self._front = front
+        self._front = front        
 
     def clone(self):
         """Returns a shallow copy of self."""
@@ -81,11 +85,14 @@ class MidSkipQueue(object):
         )
 
     def __eq__(self, other):
-        # Equality for queues - same elements
-        return (
-            (self.k == other.k) and
-            all(a == b for a, b in zip(self, other))
-        )
+        # Equality for queues - same elements and size
+        if isinstance(other, self.__class__):
+            return (
+                (self.k == other.k) and
+                all(a == b for a, b in zip(self, other))
+            )
+        # Otherwise just same elements
+        return all(a == b for a, b in zip(self, other))
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -104,7 +111,7 @@ class MidSkipQueue(object):
             return res
 
     def __iter__(self):
-        return MidSkipQueue._Iterator(self)
+        return self.__class__._Iterator(self)
 
     def __len__(self):
         return len(self._front) + len(self._rear)
@@ -116,7 +123,6 @@ class MidSkipQueue(object):
             # This is the lazy version: 
             return self.__class__(self.k, list(self)[idx])
             # It works fine, probably too slow
-
 
         # For non-slice indexes
         # return list(self)[idx]  # The lazy version :P
@@ -174,15 +180,41 @@ class MidSkipQueue(object):
         self._rear[-len(objs):] = objs
 
     def __add__(self, iterable):
-        # TODO: add another iterable
         res = self.clone()
         res.append(*list(iterable))
         return res
 
 
+class MidSkipPriorityQueue(MidSkipQueue):
+    """Priority queue that skips middle elements."""
+
+    def __init__(self, k, iterable=()):
+        # Arg checking
+        assert isinstance(k, Integral) and k >= 0
+        assert isinstance(iterable, Iterable)
+        k = int(k)
+
+        # I am running out of time for this, so gonna hack
+        super().__init__(k, sorted(iterable))
+
+    def append(self, *objs):
+        """Appends one or more objects to this collection."""
+
+        objs = sorted(objs)
+        
+        # NOTE: I'm lazy, so here: 
+        self._init_iter(
+            sorted(self._front + objs + self._rear)
+        )
+        # It's not that terrible - the three lists are ordered already
+
+        # To optimize this, I'd 
+    
+
 #
 
 if __name__ == "__main__":
+    # NORMAL QUEUE
     # Test 1
     q = MidSkipQueue(1) 
     q.append(-1)  # q: [-1]
@@ -211,3 +243,10 @@ if __name__ == "__main__":
         'MidSkipQueue(6, [0, 1, 2, 3, 4, 5, ..., 14, 15, 16, 17, 18, 19])'
     )
     assert list(q3[5:9]) == [5, 14, 15, 16]
+
+    # PRIORITY QUEUE
+    p = MidSkipPriorityQueue(1)
+    p.append(-1)
+    p += (-2, -3)
+    p.append(4)
+    p.append(-5)
