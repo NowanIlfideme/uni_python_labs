@@ -1,13 +1,18 @@
 
 import time
-import traceback
+# import traceback
 import functools
 import logging
-from collections.abc import Iterable
+import itertools
+import contextlib
 logger = logging.getLogger(__name__)
 
 
-class handle_error_context(object):
+@contextlib.contextmanager
+def handle_error_context(
+    re_raise=True, log_traceback=True, 
+    exc_type=Exception, 
+):
     """Error-handling context.
 
     Parameters
@@ -22,36 +27,13 @@ class handle_error_context(object):
         Exception type (or tuple of exception types) to catch;
         all others will be ignored. Default is Exception.
     """
-
-    def __init__(
-        self, re_raise=True, log_traceback=True, 
-        exc_type=Exception
-    ):
-        self.re_raise = bool(re_raise)
-        self.log_traceback = bool(log_traceback)
-
-        # Turn exc_type into a tuple, always;
-        # even if it's a single exception.
-        if not isinstance(exc_type, Iterable):
-            exc_type = (exc_type, )
-        self.exc_type = tuple(exc_type)
-
-    def __enter__(self):
-        # Do nothing on entrance. ;)
-        pass
-
-    def __exit__(self, type, value, trace):
-        # Check if we want to handle this exception
-        if not any(issubclass(type, xt) for xt in self.exc_type):
-            return  # will automatically re-raise
-
-        if self.log_traceback:
-            logging.exception("Context caught exception:")
-            # This will automatically add the traceback to log
-            # and no need for traceback lib stuff
-        if self.re_raise:
-            return  # will automatically re-raise 
-        return True
+    try:
+        yield
+    except exc_type as e:
+        if log_traceback:
+            logging.exception("Context caught:")
+        if re_raise:
+            raise
 
 
 def handle_error(
@@ -80,64 +62,93 @@ def handle_error(
         Number to multiply delay by after each try. Default is 1.
     """
 
-    global_tries = tries
-    global_delay = delay
-    
     # Returns this decorator...
     def decorator(func):
         # ... that wraps the function...
+
         @functools.wraps(func)
         def wrapped(*args, **kwargs):
             # ... with the context manager...
 
-            tries = global_tries
-            delay = global_delay 
+            # initialize delay and "counter" for tries
+            curr_delay = delay
+            if tries is None:
+                rng = itertools.repeat(9)
+            else:
+                rng = range(tries, 0, -1)
 
-            tb = None
-            exc = None
-            success = False
-            while not success and (tries is None or tries > 0):
+            for n_left in rng:
                 try:
-                    res = func(*args, **kwargs)
-                    success = True
+                    with handle_error_context(
+                        # force re-raising if we fail
+                        # except the last one (where we use defined)
+                        re_raise=(n_left > 1) or re_raise, 
+                        # log every time, if set
+                        log_traceback=log_traceback, 
+                        # same exceptions
+                        exc_type=exc_type, 
+                    ):
+                        res = func(*args, **kwargs)
+                        return res
                 except exc_type as e:
-                    if tries is not None:
-                        tries -= 1
-                    tb = traceback.format_exc()
-                    exc = e
-
-                    # waiting
-                    time.sleep(delay)
-                    delay *= backoff
-            if success:
-                if tb is not None:
-                    logging.error("Caught exception:\n%s" % tb)
-                return res
-            
-            raise exc
+                    if n_left > 1:
+                        time.sleep(curr_delay)
+                        curr_delay *= backoff
+                    else:
+                        # we've reached end of line
+                        raise 
         return wrapped
     return decorator
 
 
 if __name__ == "__main__":
+    import random
+
+    random.seed(42)
+
+    def zprint(*args, **kwargs):
+        print("-----------")
+        print(*args, **kwargs)
+
+    # Example 1
+    zprint("EXAMPLE 1")
+    # Prints stacktrace, no reraise
     with handle_error_context(
         re_raise=False, log_traceback=True, exc_type=ValueError
     ):
         raise ValueError()
-    # Prints traceback
-
-    @handle_error(re_raise=False)
-    def some_function():
-        return 1 / 0  # ZeroDivisionError
     
-    some_function()
-    # Didn't test :(
+    # Example 2
+    zprint("EXAMPLE 2")
+    # Prints stacktrace, but no exception  
+       
+    @handle_error(re_raise=False)
+    def f2():
+        return 1 / 0  # ZeroDivisionError
+    f2()
+    
+    # Example 3
+    zprint("EXAMPLE 3")
+    # Only raises exception, because wrong type
 
-    # Time test, kinda
-    import random
+    @handle_error(re_raise=False, exc_type=KeyError)
+    def f3():
+        return 1 / 0  # ZeroDivisionError
+    try:
+        f3()
+    except ZeroDivisionError:
+        print("Yay, we caught it")
 
-    @handle_error(re_raise=True, tries=3, delay=0.5, backoff=2)
-    def some_function():
-        if random.random() < 0.75:
-            x = 1 / 0 # ZeroDivisionError
-    some_function()
+    # Example 4
+    zprint("EXAMPLE 4")
+    # Retries multiple times, before giving up
+    # Raises 4 times
+
+    @handle_error(re_raise=True, tries=4, delay=1, backoff=2)
+    def f4(val=1):
+        if random.random() < val:
+            print(1 / 0)  # ZeroDivisionError
+    try:
+        f4()
+    except ZeroDivisionError:
+        print("Yep, they were ALL failures...")
