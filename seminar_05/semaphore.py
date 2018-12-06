@@ -49,6 +49,7 @@ class BoundedBase(metaclass=abc.ABCMeta):
     @abc.abstractclassmethod
     def get_max_instance_count(cls):
         """Gets maximum number of instances for this class."""
+        return 1
 
     def __new__(cls, *args, **kwargs):
         n = cls._instances.get(cls, 0)
