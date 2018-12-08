@@ -21,25 +21,45 @@ class LRU_TTL(object):
 
         key : (object, end-of-life time (eol))
 
-    
+    The newest-used keys appear at the right (back). 
+    The front is popped when additional keys are added (LRU).
+
+    Validation occurs when the key is accessed directly.
     """
 
-    def __init__(self, max_size=None, ttl=None, elems={}):
+    def __init__(self, max_size=None, ttl=None):
         self._max_size = max_size
         self._ttl = ttl
 
         self._d = OrderedDict()
 
-        for k, v in elems.items():
-            self[k] = v
-
-    def __repr__(self):
-        s = "%s(max_size=%r, ttl=%r, elems=%r)"
+    @property
+    def _str_base(self):
+        s = "%s(max_size=%r, ttl=%r)"
         v = (
             self.__class__.__name__, 
-            self._max_size, self._ttl, self._d
+            self._max_size, self._ttl,
         )
         return s % v
+
+    def __str__(self):
+        return self._str_base + "[%s]" % len(self._d)
+
+    def __repr__(self):
+        """Not quite a repr, but more informative than str."""
+        n = datetime.now()
+        its = []
+        for (k, (v, t)) in self._d.items():
+            if t is None:
+                its.append(
+                    "%r: %r [%s]" % (k, v, 'inf') 
+                )
+            elif t > n:
+                its.append(
+                    "%r: %r [%s]" % (k, v, t) 
+                )
+        sb = self._str_base + "[%s]" % len(its) 
+        return "\n".join([sb] + its)
 
     # Properties 
 
@@ -98,7 +118,10 @@ class LRU_TTL(object):
         v = (value, self._find_eol(ttl)) 
         self._d[key] = v
         # remove 'first' (oldest) item, if too long 
-        if (self._max_size is not None) and (len(self._d) > self._max_size):
+        if (
+            (self._max_size is not None) and 
+            (len(self._d) > self._max_size)
+        ):
             self._d.popitem(last=False)
 
     def set(self, key, value, ttl=None):
@@ -117,7 +140,7 @@ class LRU_TTL(object):
         self.__setitem__(key, value, ttl=ttl)
 
     def __getitem__(self, key):
-        """Get cache item by key.
+        """Get cache item by key. Forces validation.
         
         Raises KeyError if nonexistant or expired key.
         """ 
@@ -170,22 +193,17 @@ class LRU_TTL(object):
     # NOTE: I planned to add iterator methods. 
     # However, because of the TTL part here, I need 
     # to perform invalidation... which means that the 
-    # base OrderedDict will possibly be mutated.
+    # base OrderedDict will possibly be mutated by each 
+    # next() on the iterator. So instead, we allow this: 
 
-#    class _Iterator(Iterator):
-#        """Iterator for the LRU-TTL cache."""
-#
-#        def __init__(self, cache):
-#            self.cache = cache
-#            self.key_it = iter(cache._d)
-#
-#        def __next__(self):
-#            while True:
-#                try:
-#                    key = next(self.key_it)
-#                    val = self.cache[key]
-#                except KeyError:
-#                    
-#
-#    def __iter__(self):
-#        return self._Iterator(self)
+    def to_dict(self):
+        """Returns a dict of valid (at current moment) items."""
+
+        keys = list(self._d.keys())
+        res = {}
+        for k in keys:
+            try:
+                res[k] = self[k]
+            except KeyError:
+                pass
+        return res
