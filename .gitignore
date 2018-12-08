@@ -1,6 +1,7 @@
 
-*.pdf
 *.zip
+#*.pdf
+#/lectures
 
 */__pycache__
 *.pyc
