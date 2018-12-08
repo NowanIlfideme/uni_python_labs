@@ -50,7 +50,7 @@ class LRU_TTL(object):
         n = datetime.now()
         its = []
         for (k, (v, t)) in self._d.items():
-            if t is None:
+            if t == datetime.max:
                 its.append(
                     "%r: %r [%s]" % (k, v, 'inf') 
                 )
