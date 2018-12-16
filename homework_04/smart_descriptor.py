@@ -22,6 +22,16 @@ anyways, should return raw path
 import textwrap
 import ast 
 import os 
+import warnings
+
+
+class SmartDebug(Warning):
+    pass
+
+
+def debug(*args, **kwargs):
+    s = " ".join(*args)
+    warnings.warn(s, SmartDebug, stacklevel=2)
 
 
 class DocParser(object):
@@ -118,12 +128,16 @@ class PropParser(object):
         )
         s_bool = (
             'readonly',  # If set, raise when trying to set
-            'mandatory',  # If set, 
+            'mandatory',  # If set, requires a non-None value
             # Relevant to paths (i.e. only str)
             'check_exists', 'create_if_not_exists', 'abspath', 
+            'debug',  # If set, does debug printing everywhere.
         )
         # The DocParser set all relevant attributes
         self.raw = raw = DocParser(doc, s_prop=s_prop, s_bool=s_bool)
+
+        # Check debugging
+        self.debug = raw.debug
 
         # Find type
         self.type = {
@@ -145,6 +159,9 @@ class PropParser(object):
 
     def parse_literal(self, value):
         """Parses value, according to our set flags."""
+
+        if self.debug:
+            debug("Passed value: %r" % value)
         
         if value is None:
             if self.mandatory:
@@ -189,7 +206,80 @@ class PropParser(object):
         )
 
 
-#
+class smart_property(object):
+    """"""
+
+    def __init__(self, func, doc=None):
+        # Find out how to name the attribute
+        func_name = getattr(func, '__name__', 'Attribute')
+        self.attr_name = "_" + func_name
+        self.func = func
+
+        # Find and parse docstring
+        if doc is None:
+            doc = getattr(func, '__doc__', '')
+        self.parsed = PropParser(doc)
+        # TODO: Switch up with setting stuff
+
+    def __get__(self, instance, owner):
+        # NOTE for self:
+        # instance is the parent object
+        # owner is type(instance)
+
+        if self.parsed.debug:
+            debug("==| Instance: %r" % instance)
+            debug("==| Owner: %r" % owner)
+
+        # default_value = self.func(instance)
+        default_value = self.parsed.default
+        res = getattr(instance, self.attr_name, default_value)
+
+        # create it if we don't have it - alt, could set every time
+        if not hasattr(instance, self.attr_name):
+            setattr(instance, self.attr_name, res)
+
+        # Path-specific stuff :)
+        f_abs = self.parsed.abspath
+        f_ce = self.parsed.check_exists
+        f_cine = self.parsed.create_if_not_exists
+
+        # Check if we assume that it's a path
+        if (self.parsed.type is str) and any((f_abs, f_ce, f_cine)):
+            if self.parsed.debug:
+                debug("It's a path!")
+            
+            if f_abs:
+                res = os.path.abspath(res)
+            if f_ce and f_cine:
+                with open(res, 'a+'):
+                    # We use append mode to create, if not exists
+                    pass
+            elif f_ce and not os.path.exists(res):
+                raise ValueError("Path does not exist: %r" % res)
+
+        return res
+
+    def __set__(self, instance, value):
+        # NOTE for self:
+        # instance is the parent object
+        # value is the RHS
+
+        if self.parsed.debug:
+            debug("==| Instance: %r" % instance)
+            debug("==| Value: %r" % value)
+
+        # Handle readonly attributes
+        if self.parsed.readonly:
+            raise AttributeError(
+                "%s is readonly." % 
+                getattr(self.func, '__name__', 'Attribute')
+            )
+
+        # Check types and such
+        value = self.parsed.parse_literal(value)
+
+        setattr(instance, self.attr_name, value)
+
 
 if __name__ == "__main__":
     doc1 = """
@@ -219,118 +309,4 @@ if __name__ == "__main__":
         print(parsed.default)
         print(type(parsed.default))
         print("==================")
-#
-
-
-class smart_property(object):
-    """"""
-
-    def __init__(self, func, doc=None):
-        # Find out how to name the attribute
-        func_name = getattr(func, '__name__', 'Attribute')
-        self.attr_name = "_" + func_name
-        self.func = func
-
-        # Find and parse docstring
-        if doc is None:
-            doc = getattr(func, '__doc__', '')
-        self.parsed = PropParser(doc)
-        # TODO: Switch up with setting stuff
-
-    def __get__(self, instance, owner):
-        # NOTE for self:
-        # instance is the parent object
-        # owner is type(instance)
-
-        # print("==| Instance:", instance)
-        # print("==| Owner:", owner)
-
-        # default_value = self.func(instance)
-        default_value = self.parsed.default
-        res = getattr(instance, self.attr_name, default_value)
-
-        # create it if we don't have it - alt, could set every time
-        if not hasattr(instance, self.attr_name):
-            setattr(instance, self.attr_name, res)
-
-        # Path-specific stuff :)
-        f_abs = self.parsed.abspath
-        f_ce = self.parsed.check_exists
-        f_cine = self.parsed.create_if_not_exists
-
-        # Check if we assume that it's a path
-        if (self.parsed.type is str) and any((f_abs, f_ce, f_cine)):
-            # print("It's a path!")
-            if f_abs:
-                res = os.path.abspath(res)
-            if f_ce and f_cine:
-                with open(res, 'a+'):
-                    # We use append mode to create, if not exists
-                    pass
-            elif f_ce and not os.path.exists(res):
-                raise ValueError("Path does not exist: %r" % res)
-
-        return res
-
-    def __set__(self, instance, value):
-        # NOTE for self:
-        # instance is the parent object
-        # value is the RHS
-
-        # print("==| Instance:", instance)
-        # print("==| Value:", value)
-
-        # Handle readonly attributes
-        if self.parsed.readonly:
-            raise AttributeError(
-                "%s is readonly." % 
-                getattr(self.func, '__name__', 'Attribute')
-            )
-
-        # Check types and such
-        value = self.parsed.parse_literal(value)
-
-        setattr(instance, self.attr_name, value)
-
-
-class smart_property_test(property):
-
-    def __init__(self, fget, fset=None, fdel=None, doc=None):
-        # Find out how to name the attribute
-        func_name = getattr(fget, '__name__', 'fget')
-        self.attr_name = attr_name = "_" + func_name
-
-        # Find docstring
-        if doc is None:
-            doc = getattr(fget, '__doc__', '')
-        
-        # Parse docstring
-        # parsed_doc = _parse(doc)
-
-        def set_0(obj, val):
-            setattr(obj, attr_name, val)
-        
-        def get_0(obj):
-            return obj.__get__(attr_name)
-
-        if fset is None:
-            fset = set_0
-        
-        super().__init__(fget, fset=fset, fdel=fdel, doc=doc)
-
-        # Postprocessing
-
-    def __get__(self, instance, owner):
-        res = super().__get__(instance, owner)
-        # TODO: Switch out hijacking
-        if res is None:
-            res = 'hijacked!'
-        return res
-
-    def __set__(self, instance, value):
-        # TODO: Switch out hijacking
-        value = str(value) + " - hikacked :)"
-        super().__set__(instance, value)
-
-
 #

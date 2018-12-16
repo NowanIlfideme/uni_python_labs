@@ -1,7 +1,8 @@
 
 import unittest
+import warnings
 import os 
-from smart_descriptor import smart_property 
+from smart_descriptor import smart_property, SmartDebug
 
 
 class A(object):
@@ -188,6 +189,38 @@ class Test_smart_property(unittest.TestCase):
         b.n = None
         b.n = 'None'
         
-    
+    def test_debug(self):
+        """Tests the debug thingie."""
+
+        # Debug when making
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+
+            class D(object):
+                @smart_property
+                def d(self):
+                    """
+                    Debugging property.
+
+                    :debug
+
+                    :default: This string can be anything!
+                    """
+            
+            self.assertEqual(len(w), 1)
+
+        # Debug when reading, making an object, etc.
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            b = D()
+            b.d
+            b.d = 8
+            b.d = 'hello'
+            b.d = None
+            b.d
+            self.assertTrue(len(w) > 0)
+            self.assertTrue(issubclass(w[-1].category, SmartDebug))         
+
+
 if __name__ == "__main__":
     unittest.main()
