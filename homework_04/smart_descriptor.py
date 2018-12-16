@@ -178,6 +178,10 @@ class PropParser(object):
             if (self.type is int) and (int(value) == value):
                 return int(value)
         
+        # Check again for mandatory value
+        if value is None:
+            return self.parse_literal(value)
+
         # Otherwise, fail        
         raise TypeError(
             "Passed value of the wrong type: %r (%s)" 

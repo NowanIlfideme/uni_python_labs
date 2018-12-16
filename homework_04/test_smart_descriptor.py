@@ -77,6 +77,25 @@ class A(object):
 class B(object):
     """Another example class."""
 
+    @smart_property
+    def m(self):
+        """
+        Mandatory property.
+
+        :type: float
+        :default: -8
+
+        :mandatory
+        """
+
+    @smart_property
+    def n(self):
+        """
+        Non-mandatory property
+
+        :type: int
+        """
+
 
 class Test_smart_property(unittest.TestCase):
     """Tests the smart_property.
@@ -148,6 +167,27 @@ class Test_smart_property(unittest.TestCase):
         with self.assertRaises(ValueError):
             a.q = 'BEEF'  # not a valid hex literal
 
+    def test_m(self):
+        """Tests B.m property (mandatory)."""
 
+        b = self.b
+
+        with self.assertRaises(ValueError):
+            b.m = None
+
+        with self.assertRaises(ValueError):
+            b.m = 'None'
+
+    def test_n(self):
+        """Tests B.n property (non-mandatory)."""
+
+        b = self.b
+
+        self.assertIs(b.n, None)
+
+        b.n = None
+        b.n = 'None'
+        
+    
 if __name__ == "__main__":
     unittest.main()
